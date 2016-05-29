@@ -151,9 +151,9 @@ namespace sha2
 				}
 				else	/// for sha224(sha256), use the MSBs of round table,
 				{
-					static uint32_t	table_iv_32[80];	/// ... and LSB(MSB)s of initialization vector
+					static uint32_t	table_iv_32[80];    /// ... and LSB(MSB)s of initialization vector
 
-					for (int i = 0; i < 80 && !table_iv_32[79]; i++)	/// Skip if already evaluated
+					for (int i = 0; i < 80 && !table_iv_32[79]; i++)  /// Skip if already evaluated
 					{
 						table_iv_32[i] = i < 64 ? uint32_t(sha512_round_table[i] >> 32) :
 							uint32_t(sha512_init_values[i - 64] >> int(i < 72) * 32);
@@ -170,7 +170,7 @@ namespace sha2
 		private:
 
 			T const* round_table;	/// pointers to the round table,
-			uint8_t const* sr;		/// and shift|rotate values
+			uint8_t const* sr;	/// and shift|rotate values
 
 			enum	/// settings
 			{
@@ -241,7 +241,7 @@ namespace sha2
 		protected:
 
 			hashdata <T, T_Byte, T_Hash> result;	/// result of hash
-			T const* init_vector;					/// initialization vector
+			T const* init_vector;			/// initialization vector
 
 			///------ Full message hasher
 			bool data_hash(const void* message, const size_t len)
@@ -251,7 +251,7 @@ namespace sha2
 					std::memcpy(result.number, init_vector, BitCount);
 					uint8_t block[BlockSize], *mpointer = (uint8_t*)message;
 
-					size_t n = len / BlockSize;		/// number of successive chunks
+					size_t n = len / BlockSize;	/// number of successive chunks
 					while (n--)
 					{
 						Digest(result.number, mpointer);
