@@ -244,7 +244,7 @@ namespace sha2
 			T const* init_vector;			/// initialization vector
 
 			///------ Full message hasher
-			bool data_hash(const void* message, const size_t len)
+			bool message_hash(const void* message, const size_t len)
 			{
 				try
 				{
@@ -297,7 +297,7 @@ namespace sha2
 			static hashdata <T, T_Byte, T_Hash> calculate(const std::string &s)
 			{
 				general_sha2 sh;
-				return sh.data_hash(s.c_str(), s.size()) ? sh.result : hashdata<T, T_Byte, T_Hash>();
+				return sh.message_hash(s.c_str(), s.size()) ? sh.result : hashdata<T, T_Byte, T_Hash>();
 			}
 
 			///------ hash of file
@@ -311,7 +311,7 @@ namespace sha2
 			static hashdata <T, T_Byte, T_Hash> calculate(void* data, const size_t size)
 			{
 				general_sha2 sh;
-				return sh.data_hash(data, size) ? sh.result : hashdata<T, T_Byte, T_Hash>();
+				return sh.message_hash(data, size) ? sh.result : hashdata<T, T_Byte, T_Hash>();
 			}
 		};
 	}
