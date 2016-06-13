@@ -9,9 +9,7 @@
 #include <sys/stat.h>
 
 #ifdef _MSC_VER
-#define filestat    _stat64
-#else
-#define filestat    stat64
+#define stat64    _stat64
 #endif
 
 namespace sha2
@@ -272,8 +270,8 @@ namespace sha2
             {
                 try
                 {
-                    struct filestat st;
-                    if (filestat(path.c_str(), &st) != 0)   throw;  /// file not found
+                    struct stat64 st;
+                    if (stat64(path.c_str(), &st) != 0)     throw;  /// file not found
 
                     std::memcpy(result.number, init_vector, BitCount);
                     uint8_t block[BlockSize];
@@ -324,5 +322,4 @@ namespace sha2
     typedef templates::general_sha2 <uint64_t, uint8_t, templates::SHA_512_224> SHA512_224;
 }
 
-#undef filestat
 #endif // SHA2_h___
