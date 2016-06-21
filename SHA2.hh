@@ -247,7 +247,7 @@ namespace sha2
                         Digest(result.number, mptr);
                         mptr += BlockSize;
                     }
-                    std::memcpy(block, mptr, len % BlockSize);  /// last chunk
+                    std::memcpy(block, mptr, len % BlockSize);    /// last chunk
                     Finalize(block, len);
                 }
                 catch (...)
@@ -262,7 +262,7 @@ namespace sha2
                 try
                 {
                     struct stat64 st;
-                    if (stat64(path.c_str(), &st) != 0) throw;  /// file not found
+                    if (stat64(path.c_str(), &st) != 0) throw 0;  /// file not found
 
                     std::memcpy(result.number, init_vector, BitCount);
                     uint8_t block[BlockSize];
