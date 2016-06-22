@@ -15,7 +15,7 @@ namespace sha2
 {
     namespace templates
     {
-        enum hash_method
+        typedef enum
         {
             SHA_256,
             SHA_224,
@@ -23,62 +23,25 @@ namespace sha2
             SHA_384,
             SHA_512_256,
             SHA_512_224,
-        };
+            SHA_512_xxx,    /// to define new hash functions, replace xxx by your desired number
+        } hash_method;
 
-        static const char* b64chr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-        ///==================< general structure to save hash data >=====================
-        template <typename T, typename T_Byte, int N_Bits> struct hashdata
+        /// initializer vectors (first 64 bits of the fractional parts of the square roots of primes)
+        static const uint64_t sha512_init_vectors[][8] =
         {
-            T number[8];
-
-            std::basic_string <T_Byte> toStream()   /// convert hash to byte stream
-            {
-                std::basic_string <T_Byte> str(N_Bits / 8, 0);
-
-                for (size_t i = 0; i < str.size(); i++)
-                    str[i] = this->number[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
-
-                return str;
-            }
-
-            std::string toHex(const bool lowercase = true)  /// hex representation of the hash
-            {
-                const std::basic_string <T_Byte> str(this->toStream());
-                std::string hexstr(str.size() * 2, '0');
-
-                for (size_t i = 0, c = str[0] & 0xFF; i < hexstr.size(); c = str[i / 2] & 0xFF)
-                {
-                    hexstr[i++] += c > 0x9F ? (c / 16 - 9) | (lowercase ? 48 : 16) : c >> 4;
-                    hexstr[i++] += (c & 0xF) > 9 ? (c % 16 - 9) | (lowercase ? 48 : 16) : c & 0xF;
-                }
-                return hexstr;
-            }
-
-            std::string toBase64()  /// base64 representation of the hash
-            {
-                const std::basic_string <T_Byte> str(this->toStream());
-                size_t d = str.size() % 3;
-                const size_t len = str.size() - d;
-                std::string str64(4 * (int(d > 0) + len / 3), '=');
-
-                for (size_t i = 0, j = 0; i < len; i += 3)
-                {
-                    int n = int(str[i]) << 16 | int(str[i + 1] & 0xFF) << 8 | (str[i + 2] & 0xFF);
-                    str64[j++] = b64chr[n >> 18 & 0x3F];
-                    str64[j++] = b64chr[n >> 12 & 0x3F];
-                    str64[j++] = b64chr[n >> 6 & 0x3F];
-                    str64[j++] = b64chr[n & 0x3F];
-                }
-                if (d--)    /// padding
-                {
-                    int n = d ? int(str[len]) << 8 | (str[len + 1] & 0xFF) : str[len] & 0xFF;
-                    str64[str64.size() - 2] = d ? b64chr[(n & 0xF) << 2] : '=';
-                    str64[str64.size() - 3] = d ? b64chr[n >> 4 & 0x03F] : b64chr[(n & 3) << 4];
-                    str64[str64.size() - 4] = d ? b64chr[n >> 10 & 0x3F] : b64chr[n >> 2];
-                }
-                return str64;
-            }
+            /// sha512, primes: 2-19 (the 32 MSBs are also used in sha256)
+            { 0x6A09E667F3BCC908LL, 0xBB67AE8584CAA73BLL, 0x3C6EF372FE94F82BLL, 0xA54FF53A5F1D36F1LL,
+            0x510E527FADE682D1LL, 0x9B05688C2B3E6C1FLL, 0x1F83D9ABFB41BD6BLL, 0x5BE0CD19137E2179LL },
+            /// sha384, primes: 23-53 (the 32 LSBs are also used in sha224)
+            { 0xCBBB9D5DC1059ED8LL, 0x629A292A367CD507LL, 0x9159015A3070DD17LL, 0x152FECD8F70E5939LL,
+            0x67332667FFC00B31LL, 0x8EB44A8768581511LL, 0xDB0C2E0D64F98FA7LL, 0x47B5481DBEFA4FA4LL },
+            /// SHA-512/256 (calculated using the "SHA-512/t IV Generation Function")
+            { 0x22312194FC2BF72CLL, 0x9F555FA3C84C64C2LL, 0x2393B86B6F53B151LL, 0x963877195940EABDLL,
+            0x96283EE2A88EFFE3LL, 0xBE5E1E2553863992LL, 0x2B0199FC2C85B8AALL, 0x0EB72DDC81C52CA2LL },
+            /// SHA-512/224 (-->section 5.3.6 of http://goo.gl/VtJ5Uv)
+            { 0x8C3D37C819544DA2LL, 0x73E1996689DCD4D6LL, 0x1DFAB7AE32FF9C82LL, 0x679DD514582F9FCFLL,
+            0x0F6D2B697BD44DA8LL, 0x77E36F7304C48942LL, 0x3F9D85A86A1D36C8LL, 0x1112E6AD91D692A1LL },
+            /// here, the I.V. of the new hash functions must be inserted...
         };
 
         /// hash round-table (first 64 bits of the fractional parts of the cube roots of primes: 2-409)
@@ -106,35 +69,74 @@ namespace sha2
             0x4CC5D4BECB3E42B6LL, 0x597F299CFC657E2ALL, 0x5FCB6FAB3AD6FAECLL, 0x6C44198C4A475817LL
         };
 
-        /// initializer values (first 64 bits of the fractional parts of the square roots of primes):
-        static const uint64_t sha512_init_vectors[][8] =
-        {
-            // sha512 (the 32 MSBs are also used in sha256)
-            { 0x6A09E667F3BCC908LL, 0xBB67AE8584CAA73BLL, 0x3C6EF372FE94F82BLL, 0xA54FF53A5F1D36F1LL,
-            0x510E527FADE682D1LL, 0x9B05688C2B3E6C1FLL, 0x1F83D9ABFB41BD6BLL, 0x5BE0CD19137E2179LL },
-            // sha384 (the 32 LSBs are also used in sha224)
-            { 0xCBBB9D5DC1059ED8LL, 0x629A292A367CD507LL, 0x9159015A3070DD17LL, 0x152FECD8F70E5939LL,
-            0x67332667FFC00B31LL, 0x8EB44A8768581511LL, 0xDB0C2E0D64F98FA7LL, 0x47B5481DBEFA4FA4LL },
-            // sha512-256
-            { 0x22312194FC2BF72CLL, 0x9F555FA3C84C64C2LL, 0x2393B86B6F53B151LL, 0x963877195940EABDLL,
-            0x96283EE2A88EFFE3LL, 0xBE5E1E2553863992LL, 0x2B0199FC2C85B8AALL, 0x0EB72DDC81C52CA2LL },
-            // sha512-224
-            { 0x8C3D37C819544DA2LL, 0x73E1996689DCD4D6LL, 0x1DFAB7AE32FF9C82LL, 0x679DD514582F9FCFLL,
-            0x0F6D2B697BD44DA8LL, 0x77E36F7304C48942LL, 0x3F9D85A86A1D36C8LL, 0x1112E6AD91D692A1LL },
-        };
-
-        /// shift|rotate values in digest and round process
+        /// shift|rotate amounts in digest and round process
         static const char shift_rotate_amounts[24] =
         {
             6, 11, 25, 2, 13, 22, 7, 18, 3, 17, 19, 10, 14, 18, 41, 28, 34, 39, 1, 8, 7, 19, 61, 6
         };
 
+        static const char* b64chr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+        ///==================< general structure to save hash data >=====================
+        template <typename T, int Hash_Bits> struct hashdata
+        {
+            T number[8];
+
+            std::basic_string <uint8_t> toStream()      /// convert hash number to byte stream
+            {
+                std::basic_string <uint8_t> str(Hash_Bits / 8, 0);
+
+                for (size_t i = 0; i < str.size(); i++)
+                    str[i] = this->number[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
+
+                return str;
+            }
+
+            std::string toHex(const bool lowercase = true)  /// hex representation of the hash
+            {
+                const std::basic_string <uint8_t> str(this->toStream());
+                std::string hexstr(str.size() * 2, '0');
+
+                for (size_t i = 0, c = str[0]; i < hexstr.size(); c = str[i / 2])
+                {
+                    hexstr[i++] += c > 0x9F ? (c / 16 - 9) | (lowercase ? 48 : 16) : c >> 4;
+                    hexstr[i++] += (c & 0xF) > 9 ? (c % 16 - 9) | (lowercase ? 48 : 16) : c & 0xF;
+                }
+                return hexstr;
+            }
+
+            std::string toBase64()  /// base64 representation of the hash
+            {
+                const std::basic_string <uint8_t> str(this->toStream());
+                size_t d = str.size() % 3;
+                const size_t len = str.size() - d;
+                std::string str64(4 * (int(d > 0) + len / 3), '=');
+
+                for (size_t i = 0, j = 0; i < len; i += 3)
+                {
+                    int n = int(str[i]) << 16 | int(str[i + 1]) << 8 | str[i + 2];
+                    str64[j++] = b64chr[n >> 18 & 0x3F];
+                    str64[j++] = b64chr[n >> 12 & 0x3F];
+                    str64[j++] = b64chr[n >> 6 & 0x3F];
+                    str64[j++] = b64chr[n & 0x3F];
+                }
+                if (d--)    /// padding
+                {
+                    int n = d ? int(str[len]) << 8 | str[len + 1] : str[len];
+                    str64[str64.size() - 2] = d ? b64chr[(n & 0xF) << 2] : '=';
+                    str64[str64.size() - 3] = d ? b64chr[n >> 4 & 0x03F] : b64chr[(n & 3) << 4];
+                    str64[str64.size() - 4] = d ? b64chr[n >> 10 & 0x3F] : b64chr[n >> 2];
+                }
+                return str64;
+            }
+        };
+
         ///=================< General hash algorithm class template >====================
-        template <typename T = uint32_t, typename T_Byte = uint8_t, int H = SHA_256, int H_Bits = 256>
+        template <typename T = uint32_t, hash_method H = SHA_256, int Hash_Bits = 256>
         class general_sha2
         {
         private:
-            hashdata <T, T_Byte, H_Bits> result;    /// result of hash
+            hashdata <T, Hash_Bits> result;         /// result of hash
             T const *round_table, *init_vector;     /// pointers to the round table, init vector,...
             uint8_t const *sr;                      /// and shift|rotate values
 
@@ -147,9 +149,9 @@ namespace sha2
                     round_table = (T const*)(void*)& sha512_round_table[0];
                     init_vector = (T const*)(void*)& sha512_init_vectors[H - SHA_512][0];
                 }
-                else    /// for sha224(sha256), use the MSBs of round table,
+                else    /// for sha224(sha256), use the MSBs of round table, and LSB(MSB)s of I.V.
                 {
-                    static uint32_t table_iv_32[80];    /// ... and LSB(MSB)s of initialization vector
+                    static uint32_t table_iv_32[80];
 
                     for (int i = 0; i < 80 && !table_iv_32[79]; i++)    /// Skip if already evaluated
                     {
@@ -247,10 +249,10 @@ namespace sha2
                         Digest(result.number, mptr);
                         mptr += BlockSize;
                     }
-                    std::memcpy(block, mptr, len % BlockSize);    /// last chunk
+                    std::memcpy(block, mptr, len % BlockSize);      /// last chunk
                     Finalize(block, len);
                 }
-                catch (...)
+                catch (...)     /// if any error occurs, the result would be 0
                 {
                     std::memset(result.number, 0, BitCount);
                 }
@@ -262,7 +264,7 @@ namespace sha2
                 try
                 {
                     struct stat64 st;
-                    if (stat64(path.c_str(), &st) != 0) throw 0;  /// file not found
+                    if (stat64(path.c_str(), &st) != 0) throw 0;    /// file not found
 
                     std::memcpy(result.number, init_vector, BitCount);
                     uint8_t block[BlockSize];
@@ -282,7 +284,7 @@ namespace sha2
 
         public:
             ///------ hash of string
-            static hashdata <T, T_Byte, H_Bits> calculate(const std::string &s)
+            static hashdata <T, Hash_Bits> calculate(const std::string &s)
             {
                 general_sha2 sh;
                 sh.message_hash(s.c_str(), s.size());
@@ -290,7 +292,7 @@ namespace sha2
             }
 
             ///------ hash of file
-            static hashdata <T, T_Byte, H_Bits> file(const std::string &path, bool binary = true)
+            static hashdata <T, Hash_Bits> file(const std::string &path, bool binary = true)
             {
                 general_sha2 sh;
                 sh.file_hash(path, binary);
@@ -298,7 +300,7 @@ namespace sha2
             }
 
             ///------ hash result for a block of data
-            static hashdata <T, T_Byte, H_Bits> calculate(void* data, const size_t datasize)
+            static hashdata <T, Hash_Bits> calculate(void* data, const size_t datasize)
             {
                 general_sha2 sh;
                 sh.message_hash(data, datasize);
@@ -307,12 +309,13 @@ namespace sha2
         };
     }
 
-    typedef templates::general_sha2 <uint32_t, uint8_t, templates::SHA_256, 256>        SHA256;
-    typedef templates::general_sha2 <uint32_t, uint8_t, templates::SHA_224, 224>        SHA224;
-    typedef templates::general_sha2 <uint64_t, uint8_t, templates::SHA_512, 512>        SHA512;
-    typedef templates::general_sha2 <uint64_t, uint8_t, templates::SHA_384, 384>        SHA384;
-    typedef templates::general_sha2 <uint64_t, uint8_t, templates::SHA_512_256, 256>    SHA512_256;
-    typedef templates::general_sha2 <uint64_t, uint8_t, templates::SHA_512_224, 224>    SHA512_224;
+    typedef templates::general_sha2 <uint32_t, templates::SHA_256, 256>     SHA256;
+    typedef templates::general_sha2 <uint32_t, templates::SHA_224, 224>     SHA224;
+    typedef templates::general_sha2 <uint64_t, templates::SHA_512, 512>     SHA512;
+    typedef templates::general_sha2 <uint64_t, templates::SHA_384, 384>     SHA384;
+    typedef templates::general_sha2 <uint64_t, templates::SHA_512_256, 256> SHA512_256;
+    typedef templates::general_sha2 <uint64_t, templates::SHA_512_224, 224> SHA512_224;
+    // typedef templates::general_sha2 <uint64_t, templates::SHA_512_xxx, xxx>  SHA512_xxx;
 }
 
 #endif // SHA2_h___
