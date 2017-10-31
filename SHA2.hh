@@ -217,69 +217,55 @@ namespace sha2
             }
 
             ///------ padding the last block and finalizing the hash
-            inline void Finalize(uint8_t* block, uint64_t size)
+            inline bool Finalize(uint8_t* block, uint64_t size)
             {
                 size_t rem = size & (BlockSize - 1);
                 block[rem++] = 0x80;
                 std::memset(block + rem, 0, BlockSize - rem);
-
                 if (rem > BlockSize - 2 * sizeof(T))
                 {
                     Digest(result.number, block);
                     std::memset(block, 0, BlockSize - 8);
                 }
                 for (int i = 0; i < 8; i++)
+                {
                     block[BlockSize - 1 - i] = size << 3 >> (i * 8) & 0xFF;
-
+                }
                 Digest(result.number, block);
+                return true;
             }
 
             ///------ Full message hasher
-            void message_hash(const void* message, const size_t len)
+            bool message_hash(const void* message, const size_t len)
             {
-                try
+                uint8_t *mptr = (uint8_t*)message,
+                *block = new uint8_t[BlockSize];
+                std::memcpy(result.number, init_vector, BitCount);
+                size_t n = len / BlockSize;     /// number of successive chunks
+                while (n--)
                 {
-                    uint8_t *mptr = (uint8_t*)message,
-                        *block = new uint8_t[BlockSize];
-
-                    std::memcpy(result.number, init_vector, BitCount);
-                    size_t n = len / BlockSize;     /// number of successive chunks
-                    while (n--)
-                    {
-                        Digest(result.number, mptr);
-                        mptr += BlockSize;
-                    }
-                    std::memcpy(block, mptr, len % BlockSize);      /// last chunk
-                    Finalize(block, len);
+                    Digest(result.number, mptr);
+                    mptr += BlockSize;
                 }
-                catch (...)     /// if any error occurs, the result would be 0
-                {
-                    std::memset(result.number, 0, BitCount);
-                }
+                std::memcpy(block, mptr, len % BlockSize);      /// last chunk
+                return Finalize(block, len);
             }
 
             ///------ File hasher
-            void file_hash(const std::string path, const bool bin)
+            bool file_hash(const std::string path, const bool bin)
             {
-                try
+                struct stat64 st;
+                if (stat64(path.c_str(), &st) != 0) return false;    /// file not found
+
+                std::memcpy(result.number, init_vector, BitCount);
+                uint8_t block[BlockSize];
+                FILE* fi = bin ? std::fopen(path.c_str(), "rb") : std::fopen(path.c_str(), "r");
+                while (std::fread(block, 1, BlockSize, fi) == BlockSize)
                 {
-                    struct stat64 st;
-                    if (stat64(path.c_str(), &st) != 0) throw 0;    /// file not found
-
-                    std::memcpy(result.number, init_vector, BitCount);
-                    uint8_t block[BlockSize];
-                    FILE* fi = bin ? std::fopen(path.c_str(), "rb") : std::fopen(path.c_str(), "r");
-
-                    while (std::fread(block, 1, BlockSize, fi) == BlockSize)
-                        Digest(result.number, block);
-
-                    std::fclose(fi);
-                    Finalize(block, st.st_size);
+                    Digest(result.number, block);
                 }
-                catch (...)
-                {
-                    std::memset(result.number, 0, BitCount);
-                }
+                std::fclose(fi);
+                return Finalize(block, st.st_size);
             }
 
         public:
