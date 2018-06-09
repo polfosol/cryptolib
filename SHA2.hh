@@ -41,7 +41,7 @@ namespace sha2
             /// SHA-512/224 (-->section 5.3.6 of http://goo.gl/VtJ5Uv)
             { 0x8C3D37C819544DA2LL, 0x73E1996689DCD4D6LL, 0x1DFAB7AE32FF9C82LL, 0x679DD514582F9FCFLL,
             0x0F6D2B697BD44DA8LL, 0x77E36F7304C48942LL, 0x3F9D85A86A1D36C8LL, 0x1112E6AD91D692A1LL },
-            /// here, the I.V. of the new hash functions must be inserted...
+            /// you can insert the I.V. of the new hash functions here...
         };
 
         /// hash round-table (first 64 bits of the fractional parts of the cube roots of primes: 2-409)
@@ -75,57 +75,57 @@ namespace sha2
             6, 11, 25, 2, 13, 22, 7, 18, 3, 17, 19, 10, 14, 18, 41, 28, 34, 39, 1, 8, 7, 19, 61, 6
         };
 
-        static const char* b64chr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        static const char* B64Ch = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
         ///==================< general structure to save hash data >=====================
         template <typename T, int Hash_Bits> struct hashdata
         {
             T number[8];
 
-            std::basic_string <uint8_t> toStream()      /// convert hash number to byte stream
+            const std::basic_string <uint8_t> toStream()  /// convert hash number to byte stream
             {
                 std::basic_string <uint8_t> str(Hash_Bits / 8, 0);
-
                 for (size_t i = 0; i < str.size(); i++)
+                {
                     str[i] = this->number[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
-
+                }
                 return str;
             }
 
-            std::string toHex(const bool lowercase = true)  /// hex representation of the hash
+            const std::string toHex(bool lowercase = true)  /// hex representation of the hash
             {
-                const std::basic_string <uint8_t> str(this->toStream());
+                const size_t offset = lowercase ? 48 : 16;
+                std::basic_string <uint8_t> str(this->toStream());
                 std::string hexstr(str.size() * 2, '0');
-
                 for (size_t i = 0, c = str[0]; i < hexstr.size(); c = str[i / 2])
                 {
-                    hexstr[i++] += c > 0x9F ? (c / 16 - 9) | (lowercase ? 48 : 16) : c >> 4;
-                    hexstr[i++] += (c & 0xF) > 9 ? (c % 16 - 9) | (lowercase ? 48 : 16) : c & 0xF;
+                    hexstr[i++] += c > 0x9F ? (c / 16 - 9) | offset : c >> 4;
+                    hexstr[i++] += (c & 0xF) > 9 ? (c % 16 - 9) | offset : c & 0xF;
                 }
                 return hexstr;
             }
 
-            std::string toBase64()  /// base64 representation of the hash
+            const std::string toBase64()  /// base64 representation of the hash
             {
-                const std::basic_string <uint8_t> str(this->toStream());
-                size_t d = str.size() % 3;
-                const size_t len = str.size() - d;
-                std::string str64(4 * (int(d > 0) + len / 3), '=');
+                std::basic_string <uint8_t> str(this->toStream());
+                size_t pad = str.size() % 3;
+                const size_t len = str.size() - pad, len64 = len / 3 * 4;
+                std::string str64(len64 + (pad ? 4 : 0), '=');
 
                 for (size_t i = 0, j = 0; i < len; i += 3)
                 {
                     int n = int(str[i]) << 16 | int(str[i + 1]) << 8 | str[i + 2];
-                    str64[j++] = b64chr[n >> 18 & 0x3F];
-                    str64[j++] = b64chr[n >> 12 & 0x3F];
-                    str64[j++] = b64chr[n >> 6 & 0x3F];
-                    str64[j++] = b64chr[n & 0x3F];
+                    str64[j++] = B64Ch[n >> 18 & 0x3F];
+                    str64[j++] = B64Ch[n >> 12 & 0x3F];
+                    str64[j++] = B64Ch[n >> 6 & 0x3F];
+                    str64[j++] = B64Ch[n & 0x3F];
                 }
-                if (d--)    /// padding
+                if (pad--)  /// padding
                 {
-                    int n = d ? int(str[len]) << 8 | str[len + 1] : str[len];
-                    str64[str64.size() - 2] = d ? b64chr[(n & 0xF) << 2] : '=';
-                    str64[str64.size() - 3] = d ? b64chr[n >> 4 & 0x03F] : b64chr[(n & 3) << 4];
-                    str64[str64.size() - 4] = d ? b64chr[n >> 10 & 0x3F] : b64chr[n >> 2];
+                    int n = pad ? int(str[len]) << 8 | str[len + 1] : str[len];
+                    str64[len64] = B64Ch[pad ? n >> 10 & 0x3F : n >> 2];
+                    str64[len64 + 1] = B64Ch[pad ? n >> 4 & 0x3F : n << 4 & 0x3F];
+                    str64[len64 + 2] = pad ? B64Ch[n << 2 & 0x3F] : '=';
                 }
                 return str64;
             }
@@ -144,7 +144,7 @@ namespace sha2
             ///------ constructor and initializer
             inline general_sha2()
             {
-                if (sizeof(T) / 8)
+                if (sizeof(T) / 8)   /// is 64-bit
                 {
                     round_table = (T const*)(void*)& sha512_round_table[0];
                     init_vector = (T const*)(void*)& sha512_init_vectors[H - SHA_512][0];
@@ -182,7 +182,7 @@ namespace sha2
             }
 
             ///------ rotate and shift combination
-            T Roll(T &val, const uint8_t* r)
+            inline T Roll(T &val, const uint8_t* r)
             {
                 return ror(val, r[0]) ^ ror(val, r[1]) ^ (val >> r[2]);
             }
@@ -200,24 +200,25 @@ namespace sha2
             {
                 T   m[8], schedule[Rounds] = {};
                 std::memcpy(m, state, BitCount);        /// copy state into temporary array m
-
                 for (int i = 0; i < BlockSize; i++)     /// copy chunk into first 16 words of schedule
+                {
                     (schedule[i / sizeof(T)] <<= 8) |= T(block[i]);
-
+                }
                 for (int i = 16; i < Rounds; i++)       /// extend
+                {
                     schedule[i] = schedule[i - 16] + schedule[i - 7]
                         + Roll(schedule[i - 15], sr + 6) + Roll(schedule[i - 2], sr + 9);
-
+                }
                 for (int i = 0; i < Rounds; i++)
+                {
                     Compress(m[-i & 7], m[(1 - i) & 7], m[(2 - i) & 7], m[(3 - i) & 7], m[(4 - i) & 7],
                         m[(5 - i) & 7], m[(6 - i) & 7], m[(7 - i) & 7], schedule[i], round_table[i]);
-
-                for (int i = 0; i < 8; i++)
-                    state[i] += m[i];
+                }
+                for (int i = 0; i < 8; i++) state[i] += m[i];
             }
 
             ///------ padding the last block and finalizing the hash
-            inline bool Finalize(uint8_t* block, uint64_t size)
+            inline void Finalize(uint8_t* block, uint64_t size)
             {
                 size_t rem = size & (BlockSize - 1);
                 block[rem++] = 0x80;
@@ -232,11 +233,10 @@ namespace sha2
                     block[BlockSize - 1 - i] = size << 3 >> (i * 8) & 0xFF;
                 }
                 Digest(result.number, block);
-                return true;
             }
 
             ///------ Full message hasher
-            bool message_hash(const void* message, const size_t len)
+            void message_hash(const void* message, const size_t len)
             {
                 uint8_t *mptr = (uint8_t*)message,
                 *block = new uint8_t[BlockSize];
@@ -248,24 +248,24 @@ namespace sha2
                     mptr += BlockSize;
                 }
                 std::memcpy(block, mptr, len % BlockSize);      /// last chunk
-                return Finalize(block, len);
+                Finalize(block, len);
             }
 
             ///------ File hasher
-            bool file_hash(const std::string path, const bool bin)
+            void file_hash(const std::string path, const char* filetype)
             {
                 struct stat64 st;
-                if (stat64(path.c_str(), &st) != 0) return false;    /// file not found
+                if (stat64(path.c_str(), &st) != 0) throw std::exception();   /// file not found
 
                 std::memcpy(result.number, init_vector, BitCount);
                 uint8_t block[BlockSize];
-                FILE* fi = bin ? std::fopen(path.c_str(), "rb") : std::fopen(path.c_str(), "r");
+                FILE* fi = std::fopen(path.c_str(), filetype);
                 while (std::fread(block, 1, BlockSize, fi) == BlockSize)
                 {
                     Digest(result.number, block);
                 }
                 std::fclose(fi);
-                return Finalize(block, st.st_size);
+                Finalize(block, st.st_size);
             }
 
         public:
@@ -281,7 +281,7 @@ namespace sha2
             static hashdata <T, Hash_Bits> file(const std::string &path, bool binary = true)
             {
                 general_sha2 sh;
-                sh.file_hash(path, binary);
+                sh.file_hash(path, binary ? "rb" : "r");
                 return sh.result;
             }
 
