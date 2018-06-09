@@ -29,10 +29,10 @@ namespace sha2
         /// initializer vectors (first 64 bits of the fractional parts of the square roots of primes)
         static const uint64_t sha512_init_vectors[][8] =
         {
-            /// sha512, primes: 2-19 (the 32 MSBs are also used in sha256)
+            /// sha512, primes: 2-19 (their 32 MSBs are also used in sha256)
             { 0x6A09E667F3BCC908LL, 0xBB67AE8584CAA73BLL, 0x3C6EF372FE94F82BLL, 0xA54FF53A5F1D36F1LL,
             0x510E527FADE682D1LL, 0x9B05688C2B3E6C1FLL, 0x1F83D9ABFB41BD6BLL, 0x5BE0CD19137E2179LL },
-            /// sha384, primes: 23-53 (the 32 LSBs are also used in sha224)
+            /// sha384, primes: 23-53 (their 32 LSBs are also used in sha224)
             { 0xCBBB9D5DC1059ED8LL, 0x629A292A367CD507LL, 0x9159015A3070DD17LL, 0x152FECD8F70E5939LL,
             0x67332667FFC00B31LL, 0x8EB44A8768581511LL, 0xDB0C2E0D64F98FA7LL, 0x47B5481DBEFA4FA4LL },
             /// SHA-512/256 (calculated using the "SHA-512/t IV Generation Function")
@@ -109,8 +109,8 @@ namespace sha2
             {
                 std::basic_string <uint8_t> str(this->toStream());
                 size_t pad = str.size() % 3;
-                const size_t len = str.size() - pad, len64 = len / 3 * 4;
-                std::string str64(len64 + (pad ? 4 : 0), '=');
+                const size_t len = str.size() - pad;
+                std::string str64(4 * (int(pad > 0) + len / 3), '=');
 
                 for (size_t i = 0, j = 0; i < len; i += 3)
                 {
@@ -123,9 +123,9 @@ namespace sha2
                 if (pad--)  /// padding
                 {
                     int n = pad ? int(str[len]) << 8 | str[len + 1] : str[len];
-                    str64[len64] = B64Ch[pad ? n >> 10 & 0x3F : n >> 2];
-                    str64[len64 + 1] = B64Ch[pad ? n >> 4 & 0x3F : n << 4 & 0x3F];
-                    str64[len64 + 2] = pad ? B64Ch[n << 2 & 0x3F] : '=';
+                    str64[str64.size() - 4] = B64Ch[pad ? n >> 10 & 0x3F : n >> 2];
+                    str64[str64.size() - 3] = B64Ch[pad ? n >> 4 & 0x03F : n << 4 & 0x3F];
+                    str64[str64.size() - 2] = pad ? B64Ch[n << 2 & 0x3F] : '=';
                 }
                 return str64;
             }
@@ -144,25 +144,24 @@ namespace sha2
             ///------ constructor and initializer
             inline general_sha2()
             {
-                sr = (uint8_t const*)& shift_rotate_amounts[12 * (sizeof(T) / 8)];
-                if (sizeof(T) / 8)  /// is 64-bit
+                if (sizeof(T) / 8)  /// is 64-bit based hash (SHA512)
                 {
                     round_table = (T const*)(void*)& sha512_round_table[0];
                     init_vector = (T const*)(void*)& sha512_init_vectors[H - SHA_512][0];
-                    return;
                 }
-                static uint32_t table_iv_32[80];
-                /// for sha224(sha256), use the MSBs of round table, and LSB(MSB)s of the I.V.
-                if (table_iv_32[0] == 0)
+                else
                 {
-                    for (int i = 0; i < 80; i++)
+                    static uint32_t table_iv_32[80];  /// loop is skipped if it was evaluated before.
+                    for (int i = 0; i < 80 && !table_iv_32[79]; i++)
                     {
+                        /// use the 32 bit MSBs of round table, and MSBs (LSB in sha224) of the I.V.
                         table_iv_32[i] = i < 64 ? uint32_t(sha512_round_table[i] >> 32) :
                             uint32_t(sha512_init_vectors[i / 72][i % 8] >> int(i < 72) * 32);
                     }
+                    round_table = (T const*)(void*)& table_iv_32[0];
+                    init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
                 }
-                round_table = (T const*)(void*)& table_iv_32[0];
-                init_vector = (T const*)(void*)& table_iv_32[8 * (H - SHA_256 + 8)];
+                sr = (uint8_t const*)& shift_rotate_amounts[12 * (sizeof(T) / 8)];
             }
 
             ///------ destructor
@@ -271,10 +270,10 @@ namespace sha2
 
         public:
             ///------ hash of string
-            static hashdata <T, Hash_Bits> calculate(const std::string &s)
+            static hashdata <T, Hash_Bits> calculate(const std::string &str)
             {
                 general_sha2 sh;
-                sh.message_hash(s.c_str(), s.size());
+                sh.message_hash(str.c_str(), str.size());
                 return sh.result;
             }
 
