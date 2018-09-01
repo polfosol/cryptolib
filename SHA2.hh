@@ -77,44 +77,37 @@ namespace sha2
 
         static const char* B64Ch = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-        ///==================< general structure to save hash data >=====================
-        template <typename T, int Hash_Bits> struct hashdata
+        ///======================< structure to save hash data >=========================
+        struct hashdata
         {
-            T number[8];
+            std::basic_string <uint8_t> bytes;  /// byte array of hash number
 
-            const std::basic_string <uint8_t> toStream()  /// convert hash number to byte stream
+            hashdata(const uint8_t* sequence, const size_t& len)
             {
-                std::basic_string <uint8_t> str(Hash_Bits / 8, 0);
-                for (size_t i = 0; i < str.size(); i++)
-                {
-                    str[i] = this->number[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
-                }
-                return str;
+                bytes = std::basic_string <uint8_t> (sequence, len);
             }
 
-            const std::string toHex(bool lowercase = true)  /// hex representation of the hash
+            const std::string toHex(const bool lowercase = true)  /// hex representation of the hash
             {
-                const size_t offset = lowercase ? 48 : 16;
-                std::basic_string <uint8_t> str(this->toStream());
-                std::string hexstr(str.size() * 2, '0');
-                for (size_t i = 0, c = str[0]; i < hexstr.size(); c = str[i / 2])
+                const size_t letter = lowercase ? 0x50 : 0x70;
+                std::string hexstr(bytes.size() * 2, '0');
+                for (size_t i = 0, c = bytes[0]; i < hexstr.size(); c = bytes[i / 2])
                 {
-                    hexstr[i++] += c > 0x9F ? (c / 16 - 9) | offset : c >> 4;
-                    hexstr[i++] += (c & 0xF) > 9 ? (c % 16 - 9) | offset : c & 0xF;
+                    hexstr[i++] ^= c > 0x9F ? (c / 16 - 9) | letter : c >> 4;
+                    hexstr[i++] ^= (c & 0xF) > 9 ? (c % 16 - 9) | letter : c & 0xF;
                 }
                 return hexstr;
             }
 
             const std::string toBase64()  /// base64 representation of the hash
             {
-                std::basic_string <uint8_t> str(this->toStream());
-                size_t pad = str.size() % 3;
-                const size_t len = str.size() - pad;
+                size_t pad = bytes.size() % 3;
+                const size_t len = bytes.size() - pad;
                 std::string str64(4 * (int(pad > 0) + len / 3), '=');
 
                 for (size_t i = 0, j = 0; i < len; i += 3)
                 {
-                    int n = int(str[i]) << 16 | int(str[i + 1]) << 8 | str[i + 2];
+                    int n = int(bytes[i]) << 16 | int(bytes[i + 1]) << 8 | bytes[i + 2];
                     str64[j++] = B64Ch[n >> 18 & 0x3F];
                     str64[j++] = B64Ch[n >> 12 & 0x3F];
                     str64[j++] = B64Ch[n >> 6 & 0x3F];
@@ -122,7 +115,7 @@ namespace sha2
                 }
                 if (pad--)  /// padding
                 {
-                    int n = pad ? int(str[len]) << 8 | str[len + 1] : str[len];
+                    int n = pad ? int(bytes[len]) << 8 | bytes[len + 1] : bytes[len];
                     str64[str64.size() - 4] = B64Ch[pad ? n >> 10 & 0x3F : n >> 2];
                     str64[str64.size() - 3] = B64Ch[pad ? n >> 4 & 0x03F : n << 4 & 0x3F];
                     str64[str64.size() - 2] = pad ? B64Ch[n << 2 & 0x3F] : '=';
@@ -132,13 +125,14 @@ namespace sha2
         };
 
         ///=================< General hash algorithm class template >====================
-        template <typename T = uint32_t, hash_method H = SHA_256, int Hash_Bits = 256>
+        template <typename T = uint32_t, hash_method H = SHA_256, int Hash_Size = 256>
         class general_sha2
         {
         private:
-            hashdata <T, Hash_Bits> result;        /// result of hash
-            T const *round_table, *init_vector;    /// pointers to the round table, init vector,...
-            uint8_t const *sr;                     /// and shift|rotate values
+            T *num = new T[8];                       /// hash number
+            uint8_t *bytes = new uint8_t[BitCount];  /// byte sequence of hash number
+            const T *round_table, *init_vector;      /// round table & initialization vector
+            const uint8_t *sr;                       /// shift|rotate values
 
         public:
             ///------ constructor and initializer
@@ -225,29 +219,33 @@ namespace sha2
                 std::memset(block + rem, 0, BlockSize - rem);
                 if (rem > BlockSize - 2 * sizeof(T))
                 {
-                    Digest(result.number, block);
+                    Digest(num, block);
                     std::memset(block, 0, BlockSize - 8);
                 }
                 for (int i = 0; i < 8; i++)
                 {
                     block[BlockSize - 1 - i] = size << 3 >> (i * 8) & 0xFF;
                 }
-                Digest(result.number, block);
+                Digest(num, block);
+                for (int i = 0; i < BitCount; i++)
+                {
+                    bytes[i] = num[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
+                }
             }
 
             ///------ Full message hasher
             void message_hash(const void* message, const size_t len)
             {
-                uint8_t *mptr = (uint8_t*)message,
-                *block = new uint8_t[BlockSize];
-                std::memcpy(result.number, init_vector, BitCount);
+                std::memcpy(num, init_vector, BitCount);
+                uint8_t *block = new uint8_t[BlockSize],
+                        *mptr = (uint8_t*)message;
                 size_t n = len / BlockSize;     /// number of successive chunks
                 while (n--)
                 {
-                    Digest(result.number, mptr);
+                    Digest(num, mptr);
                     mptr += BlockSize;
                 }
-                std::memcpy(block, mptr, len % BlockSize);      /// last chunk
+                std::memcpy(block, mptr, len % BlockSize);   /// last chunk
                 Finalize(block, len);
             }
 
@@ -257,12 +255,12 @@ namespace sha2
                 struct stat64 st;
                 if (stat64(path.c_str(), &st) != 0) throw std::exception();   /// file not found
 
-                std::memcpy(result.number, init_vector, BitCount);
+                std::memcpy(num, init_vector, BitCount);
                 uint8_t block[BlockSize];
                 FILE* fi = std::fopen(path.c_str(), filetype);
                 while (std::fread(block, 1, BlockSize, fi) == BlockSize)
                 {
-                    Digest(result.number, block);
+                    Digest(num, block);
                 }
                 std::fclose(fi);
                 Finalize(block, st.st_size);
@@ -270,27 +268,27 @@ namespace sha2
 
         public:
             ///------ hash of string
-            static hashdata <T, Hash_Bits> calculate(const std::string &str)
+            static hashdata calculate(const std::string &str)
             {
                 general_sha2 sh;
                 sh.message_hash(str.c_str(), str.size());
-                return sh.result;
+                return hashdata(sh.bytes, Hash_Size / 8);
             }
 
             ///------ hash of file
-            static hashdata <T, Hash_Bits> file(const std::string &path, bool binary = true)
+            static hashdata file(const std::string &path, bool binary = true)
             {
                 general_sha2 sh;
                 sh.file_hash(path, binary ? "rb" : "r");
-                return sh.result;
+                return hashdata(sh.bytes, Hash_Size / 8);
             }
 
             ///------ hash result for a block of data
-            static hashdata <T, Hash_Bits> calculate(void* data, const size_t datasize)
+            static hashdata calculate(void* data, const size_t datasize)
             {
                 general_sha2 sh;
                 sh.message_hash(data, datasize);
-                return sh.result;
+                return hashdata(sh.bytes, Hash_Size / 8);
             }
         };
     }
