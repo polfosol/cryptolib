@@ -129,10 +129,10 @@ namespace sha2
         class general_sha2
         {
         private:
-            T *num = new T[8];                       /// hash number
-            uint8_t *bytes = new uint8_t[BitCount];  /// byte sequence of hash number
-            const T *round_table, *init_vector;      /// round table & initialization vector
-            const uint8_t *sr;                       /// shift|rotate values
+            T num[8];                            /// hash number
+            uint8_t bytes[8 * sizeof(T)];        /// byte sequence of hash number
+            const T *round_table, *init_vector;  /// round table & initialization vector
+            const uint8_t *sr;                   /// shift|rotate values
 
         public:
             ///------ constructor and initializer
