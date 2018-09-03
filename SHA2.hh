@@ -138,24 +138,22 @@ namespace sha2
             ///------ constructor and initializer
             inline general_sha2()
             {
-                if (sizeof(T) / 8)  /// is 64-bit based hash (SHA512)
+                sr = (uint8_t const*)& shift_rotate_amounts[sizeof(T) == 8 ? 12 : 0];
+                if (sizeof(T) == 8)  /// is 64-bit based hash (SHA512)
                 {
                     round_table = (T const*)(void*)& sha512_round_table[0];
                     init_vector = (T const*)(void*)& sha512_init_vectors[H - SHA_512][0];
+                    return;
                 }
-                else
+                static uint32_t table_iv_32[80];
+                for (int i = 0; i < 80; i++)
                 {
-                    static uint32_t table_iv_32[80];  /// loop is skipped if it was evaluated before.
-                    for (int i = 0; i < 80 && !table_iv_32[79]; i++)
-                    {
-                        /// use the 32 bit MSBs of round table, and MSBs (LSB in sha224) of the I.V.
-                        table_iv_32[i] = i < 64 ? uint32_t(sha512_round_table[i] >> 32) :
-                            uint32_t(sha512_init_vectors[i / 72][i % 8] >> int(i < 72) * 32);
-                    }
-                    round_table = (T const*)(void*)& table_iv_32[0];
-                    init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
+                    table_iv_32[i] = i < 72  /// use the 32 bit MSBs of round table and I.V.
+                        ? (i < 64 ? sha512_round_table[i] : sha512_init_vectors[0][i & 7]) >> 32
+                        : sha512_init_vectors[1][i & 7];  /// for sha224, LSBs of I.V. is used
                 }
-                sr = (uint8_t const*)& shift_rotate_amounts[12 * (sizeof(T) / 8)];
+                round_table = (T const*)(void*)& table_iv_32[0];
+                init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
             }
 
             ///------ destructor
