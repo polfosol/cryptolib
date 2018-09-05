@@ -87,7 +87,7 @@ namespace sha2
                 bytes = std::basic_string <uint8_t> (sequence, len);
             }
 
-            const std::string toHex(const bool lowercase = true)  /// hex representation of the hash
+            const std::string toHex(bool lowercase = true)  /// hex representation of the hash
             {
                 const size_t letter = lowercase ? 0x50 : 0x70;
                 std::string hexstr(bytes.size() * 2, '0');
@@ -232,7 +232,7 @@ namespace sha2
             }
 
             ///------ Full message hasher
-            void message_hash(const void* message, const size_t len)
+            void message_hash(const void* message, const size_t &len)
             {
                 std::memcpy(num, init_vector, BitCount);
                 uint8_t *block = new uint8_t[BlockSize],
@@ -248,7 +248,7 @@ namespace sha2
             }
 
             ///------ File hasher
-            void file_hash(const std::string path, const char* filetype)
+            void file_hash(const std::string &path, const char* filetype)
             {
                 struct stat64 st;
                 if (stat64(path.c_str(), &st) != 0) throw std::exception();   /// file not found
