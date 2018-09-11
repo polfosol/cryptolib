@@ -145,12 +145,12 @@ namespace sha2
                     init_vector = (T const*)(void*)& sha512_init_vectors[H - SHA_512][0];
                     return;
                 }
-                static uint32_t table_iv_32[80];
-                for (int i = 0; i < 80; i++)
+                static uint32_t table_iv_32[80], i = 0;  /// 32-bit based hashes
+                if (table_iv_32[0] == 0)  /// loops are skipped if static array is already filled.
                 {
-                    table_iv_32[i] = i < 72  /// use the 32 bit MSBs of round table and I.V.
-                        ? (i < 64 ? sha512_round_table[i] : sha512_init_vectors[0][i & 7]) >> 32
-                        : sha512_init_vectors[1][i & 7];  /// for sha224, LSBs of I.V. is used
+                    for (; i < 64; ++i) table_iv_32[i] = sha512_round_table[i] >> 32;   // MSBs
+                    for (; i < 72; ++i) table_iv_32[i] = sha512_init_vectors[0][i & 7] >> 32;
+                    for (; i < 80; ++i) table_iv_32[i] = sha512_init_vectors[1][i & 7]; // for SHA224
                 }
                 round_table = (T const*)(void*)& table_iv_32[0];
                 init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
@@ -220,12 +220,12 @@ namespace sha2
                     Digest(num, block);
                     std::memset(block, 0, BlockSize - 8);
                 }
-                for (int i = 0; i < 8; i++)
+                for (size_t i = 0; i < 8; i++)
                 {
                     block[BlockSize - 1 - i] = size << 3 >> (i * 8) & 0xFF;
                 }
                 Digest(num, block);
-                for (int i = 0; i < BitCount; i++)
+                for (size_t i = 0; i < BitCount; i++)
                 {
                     bytes[i] = num[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
                 }
