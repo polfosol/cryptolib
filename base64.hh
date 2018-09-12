@@ -20,55 +20,66 @@ static const int B64index[256] =
 
 const std::string b64encode(const void* data, const size_t &len)
 {
-    unsigned char *p = (unsigned char*)data,
-                *str = new unsigned char[(len + 2) / 3 * 4];
-    size_t j = 0, pad = len % 3;
-    const size_t Len = len - pad;
+    if (len == 0) return "";
 
-    for(size_t i = 0; i < Len; i += 3)
+    std::string result((len + 2) / 3 * 4, '=');
+    char *p = (char*) data, *str = &result[0];
+    size_t j = 0, pad = len % 3;
+    const size_t last = len - pad;
+
+    for (size_t i = 0; i < last; )
     {
-        int n = int(p[i]) << 16 | int(p[i + 1]) << 8 | p[i + 2];
+        int n = int(p[i++]) << 16;
+        n |= int(p[i++]) << 8;
+        n |= p[i++];
         str[j++] = B64chars[n >> 18];
         str[j++] = B64chars[n >> 12 & 0x3F];
         str[j++] = B64chars[n >> 6 & 0x3F];
         str[j++] = B64chars[n & 0x3F];
     }
-    if(pad)  /// set padding
+    if (pad)  /// set padding
     {
-        int n = --pad ? int(p[Len]) << 8 | p[Len + 1] : p[Len];
+        int n = --pad ? int(p[last]) << 8 | p[last + 1] : p[last];
         str[j++] = B64chars[pad ? n >> 10 & 0x3F : n >> 2];
         str[j++] = B64chars[pad ? n >> 4 & 0x03F : n << 4 & 0x3F];
         str[j++] = pad ? B64chars[n << 2 & 0x3F] : '=';
-        str[j++] = '=';
     }
-    return std::string((const char*) str, j);
+    return result;
 }
 
 const std::string b64decode(const void* data, const size_t &len)
 {
-    unsigned char *p = (unsigned char*)data,
-                *str = new unsigned char[(len + 3) / 4 * 3];
-    size_t j = 0, pad = len > 0 && (len % 4 || p[len - 1] == '=');
-    const size_t Len = (len - pad) / 4 << 2; 
+    if (len == 0) return "";
 
-    for(size_t i = 0; i < Len; i += 4)
+    unsigned char *p = (unsigned char*) data;
+    size_t j = 0,
+        pad1 = len % 4 || p[len - 1] == '=',
+        pad2 = pad1 && (len % 4 > 2 || p[len - 2] != '=');
+    const size_t last = (len - pad1) / 4 << 2;
+    std::string result(last / 4 * 3 + pad1 + pad2, '\0');
+    unsigned char *str = (unsigned char*) &result[0];
+
+    for (size_t i = 0; i < last; )
     {
-        int n = B64index[p[i]] << 18 | B64index[p[i + 1]] << 12 | B64index[p[i + 2]] << 6 | B64index[p[i + 3]];
+        int n = B64index[p[i++]] << 18;
+        n |= B64index[p[i++]] << 12;
+        n |= B64index[p[i++]] << 6;
+        n |= B64index[p[i++]];
         str[j++] = n >> 16;
-        str[j++] = n >> 8 & 0xFF;
-        str[j++] = n & 0xFF;
+        str[j++] = n >> 8;
+        str[j++] = n;
     }
-    if(pad)
+    if (pad1)
     {
-        int n = B64index[p[Len]] << 18 | B64index[p[Len + 1]] << 12;
+        int n = B64index[p[last]] << 18 | B64index[p[last + 1]] << 12;
         str[j++] = n >> 16;
-        if(len > Len + 2 && p[Len + 2] != '=')
+        if (pad2)
         {
-            n |= B64index[p[Len + 2]] << 6;
-            str[j++] = n >> 8 & 0xFF;
+            n |= B64index[p[last + 2]] << 6;
+            str[j++] = n >> 8;
         }
     }
-    return std::string((const char*) str, j);
+    return result;
 }
 
 std::string b64encode(const std::string& str)
