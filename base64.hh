@@ -2,7 +2,6 @@
 #define BASE64_h___
 
 #include <string>
-#include <cstring>
 
 static const char* B64chars
     = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -19,12 +18,12 @@ static const int B64index[256] =
     41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
 };
 
-std::string b64encode(const void* data, const size_t &len)
+const std::string b64encode(const void* data, const size_t &len)
 {
+    unsigned char *p = (unsigned char*)data,
+                *str = new unsigned char[(len + 2) / 3 * 4];
     size_t j = 0, pad = len % 3;
     const size_t Len = len - pad;
-    unsigned char *p = (unsigned char*)data,
-                *str = new unsigned char[(len + 2) / 3 << 2];
 
     for(size_t i = 0; i < Len; i += 3)
     {
@@ -45,7 +44,7 @@ std::string b64encode(const void* data, const size_t &len)
     return std::string((const char*) str, j);
 }
 
-std::string b64decode(const void* data, const size_t &len)
+const std::string b64decode(const void* data, const size_t &len)
 {
     unsigned char *p = (unsigned char*)data,
                 *str = new unsigned char[(len + 3) / 4 * 3];
@@ -63,8 +62,7 @@ std::string b64decode(const void* data, const size_t &len)
     {
         int n = B64index[p[Len]] << 18 | B64index[p[Len + 1]] << 12;
         str[j++] = n >> 16;
-
-        if(len > Len + 1 && p[Len + 2] != '=')
+        if(len > Len + 2 && p[Len + 2] != '=')
         {
             n |= B64index[p[Len + 2]] << 6;
             str[j++] = n >> 8 & 0xFF;
@@ -73,8 +71,14 @@ std::string b64decode(const void* data, const size_t &len)
     return std::string((const char*) str, j);
 }
 
+std::string b64encode(const std::string& str)
+{
+    return b64encode(str.c_str(), str.size());
+}
+
 std::string b64decode(const std::string& str64)
 {
     return b64decode(str64.c_str(), str64.size());
 }
+
 #endif  // BASE64_h___
