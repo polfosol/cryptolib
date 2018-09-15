@@ -156,8 +156,7 @@ namespace sha2
                 init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
             }
 
-            ///------ destructor
-            virtual ~general_sha2(){}
+            /// the default destructor should take care of num and bytes. others don't need deletion(?)
 
         private:
             enum
