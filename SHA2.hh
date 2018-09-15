@@ -101,11 +101,11 @@ namespace sha2
 
             const std::string toBase64()  /// base64 representation of the hash
             {
-                size_t pad = bytes.size() % 3;
-                const size_t len = bytes.size() - pad;
-                std::string str64(4 * (int(pad > 0) + len / 3), '=');
+                size_t j = 0, pad = bytes.size() % 3;
+                std::string  str64((bytes.size() + 2) / 3 * 4, '=');
+                const size_t  len = bytes.size() - pad;
 
-                for (size_t i = 0, j = 0; i < len; i += 3)
+                for (size_t i = 0; i < len; i += 3)
                 {
                     int n = int(bytes[i]) << 16 | int(bytes[i + 1]) << 8 | bytes[i + 2];
                     str64[j++] = B64Ch[n >> 18 & 0x3F];
@@ -113,12 +113,12 @@ namespace sha2
                     str64[j++] = B64Ch[n >> 6 & 0x3F];
                     str64[j++] = B64Ch[n & 0x3F];
                 }
-                if (pad--)  /// padding
+                if (pad)  /// set padding
                 {
-                    int n = pad ? int(bytes[len]) << 8 | bytes[len + 1] : bytes[len];
-                    str64[str64.size() - 4] = B64Ch[pad ? n >> 10 & 0x3F : n >> 2];
-                    str64[str64.size() - 3] = B64Ch[pad ? n >> 4 & 0x03F : n << 4 & 0x3F];
-                    str64[str64.size() - 2] = pad ? B64Ch[n << 2 & 0x3F] : '=';
+                    int n = --pad ? int(bytes[len]) << 8 | bytes[len + 1] : bytes[len];
+                    str64[j++] = B64Ch[pad ? n >> 10 & 0x3F : n >> 2];
+                    str64[j++] = B64Ch[pad ? n >> 4 & 0x03F : n << 4 & 0x3F];
+                    str64[j++] = pad ? B64Ch[n << 2 & 0x3F] : '=';
                 }
                 return str64;
             }
