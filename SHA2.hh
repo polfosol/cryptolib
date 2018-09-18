@@ -108,7 +108,7 @@ namespace sha2
                 for (size_t i = 0; i < len; i += 3)
                 {
                     int n = int(bytes[i]) << 16 | int(bytes[i + 1]) << 8 | bytes[i + 2];
-                    str64[j++] = B64Ch[n >> 18 & 0x3F];
+                    str64[j++] = B64Ch[n >> 18];
                     str64[j++] = B64Ch[n >> 12 & 0x3F];
                     str64[j++] = B64Ch[n >> 6 & 0x3F];
                     str64[j++] = B64Ch[n & 0x3F];
@@ -191,21 +191,21 @@ namespace sha2
             {
                 T   t[8], schedule[Rounds] = {};
                 std::memcpy(t, state, BitCount);        /// copy state into temporary array t
-                for (int i = 0; i < BlockSize; i++)     /// copy chunk into first 16 words of schedule
+                for (size_t i = 0; i < BlockSize; i++)  /// copy chunk into first 16 words of schedule
                 {
                     (schedule[i / sizeof(T)] <<= 8) |= T(chunk[i]);
                 }
-                for (int i = 16; i < Rounds; i++)       /// extend
+                for (size_t i = 16; i < Rounds; i++)    /// extend
                 {
                     schedule[i] = schedule[i - 16] + schedule[i - 7]
                         + Roll(schedule[i - 15], sr + 6) + Roll(schedule[i - 2], sr + 9);
                 }
-                for (int i = 0; i < Rounds; i++)
+                for (size_t i = 0; i < Rounds; i++)
                 {
                     Compress(t[-i & 7], t[(1 - i) & 7], t[(2 - i) & 7], t[(3 - i) & 7], t[(4 - i) & 7],
                         t[(5 - i) & 7], t[(6 - i) & 7], t[(7 - i) & 7], schedule[i], round_table[i]);
                 }
-                for (int i = 0; i < 8; i++) state[i] += t[i];
+                for (size_t i = 0; i < 8; i++) state[i] += t[i];
             }
 
             ///------ padding the last block and finalizing the hash
