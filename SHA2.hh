@@ -156,7 +156,7 @@ namespace sha2
                 init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
             }
 
-            /// the default destructor should take care of num and bytes. others don't need deletion(?)
+            /// the default destructor should take care of num and bytes. others won't need deletion(?)
 
         private:
             enum
@@ -234,14 +234,14 @@ namespace sha2
             void message_hash(const void* message, const size_t &len)
             {
                 std::memcpy(num, init_vector, BitCount);
-                uint8_t *block = new uint8_t[BlockSize],
-                        *mptr = (uint8_t*)message;
+                uint8_t* mptr = (uint8_t*)message;
                 size_t n = len / BlockSize;     /// number of successive chunks
                 while (n--)
                 {
                     Digest(num, mptr);
                     mptr += BlockSize;
                 }
+                uint8_t block[BlockSize];
                 std::memcpy(block, mptr, len % BlockSize);   /// last chunk
                 Finalize(block, len);
             }
