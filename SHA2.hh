@@ -90,7 +90,7 @@ namespace sha2
             const std::string toHex(bool lowercase = true)  /// hex representation of the hash
             {
                 const size_t letter = lowercase ? 0x50 : 0x70;
-                std::string hexstr(bytes.size() * 2, '0');
+                std::string  hexstr(bytes.size() * 2, '0');
                 for (size_t i = 0, c = bytes[0]; i < hexstr.size(); c = bytes[i / 2])
                 {
                     hexstr[i++] ^= c > 0x9F ? (c / 16 - 9) | letter : c >> 4;
@@ -103,7 +103,7 @@ namespace sha2
             {
                 size_t j = 0, pad = bytes.size() % 3;
                 std::string  str64((bytes.size() + 2) / 3 * 4, '=');
-                const size_t  len = bytes.size() - pad;
+                const  size_t len = bytes.size() - pad;
 
                 for (size_t i = 0; i < len; i += 3)
                 {
@@ -129,7 +129,7 @@ namespace sha2
         class general_sha2
         {
         private:
-            T num[8];                            /// hash number
+            T state[8];                          /// hash number
             uint8_t bytes[8 * sizeof(T)];        /// byte sequence of hash number
             const T *round_table, *init_vector;  /// round table & initialization vector
             const uint8_t *sr;                   /// shift|rotate values
@@ -187,13 +187,13 @@ namespace sha2
             }
 
             ///------ compress & digest process of message chunks
-            inline void Digest(T* state, const uint8_t* block)
+            inline void Digest(const uint8_t* chunk)
             {
-                T   m[8], schedule[Rounds] = {};
-                std::memcpy(m, state, BitCount);        /// copy state into temporary array m
+                T   t[8], schedule[Rounds] = {};
+                std::memcpy(t, state, BitCount);        /// copy state into temporary array t
                 for (int i = 0; i < BlockSize; i++)     /// copy chunk into first 16 words of schedule
                 {
-                    (schedule[i / sizeof(T)] <<= 8) |= T(block[i]);
+                    (schedule[i / sizeof(T)] <<= 8) |= T(chunk[i]);
                 }
                 for (int i = 16; i < Rounds; i++)       /// extend
                 {
@@ -202,10 +202,10 @@ namespace sha2
                 }
                 for (int i = 0; i < Rounds; i++)
                 {
-                    Compress(m[-i & 7], m[(1 - i) & 7], m[(2 - i) & 7], m[(3 - i) & 7], m[(4 - i) & 7],
-                        m[(5 - i) & 7], m[(6 - i) & 7], m[(7 - i) & 7], schedule[i], round_table[i]);
+                    Compress(t[-i & 7], t[(1 - i) & 7], t[(2 - i) & 7], t[(3 - i) & 7], t[(4 - i) & 7],
+                        t[(5 - i) & 7], t[(6 - i) & 7], t[(7 - i) & 7], schedule[i], round_table[i]);
                 }
-                for (int i = 0; i < 8; i++) state[i] += m[i];
+                for (int i = 0; i < 8; i++) state[i] += t[i];
             }
 
             ///------ padding the last block and finalizing the hash
@@ -216,29 +216,29 @@ namespace sha2
                 std::memset(block + rem, 0, BlockSize - rem);
                 if (rem > BlockSize - 2 * sizeof(T))
                 {
-                    Digest(num, block);
+                    Digest(block);
                     std::memset(block, 0, BlockSize - 8);
                 }
                 for (size_t i = 0; i < 8; i++)
                 {
                     block[BlockSize - 1 - i] = size << 3 >> (i * 8) & 0xFF;
                 }
-                Digest(num, block);
+                Digest(block);
                 for (size_t i = 0; i < BitCount; i++)
                 {
-                    bytes[i] = num[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
+                    bytes[i] = state[i / sizeof(T)] >> (~i % sizeof(T) * 8) & 0xFF;
                 }
             }
 
             ///------ Full message hasher
             void message_hash(const void* message, const size_t &len)
             {
-                std::memcpy(num, init_vector, BitCount);
+                std::memcpy(state, init_vector, BitCount);
                 uint8_t* mptr = (uint8_t*)message;
                 size_t n = len / BlockSize;     /// number of successive chunks
                 while (n--)
                 {
-                    Digest(num, mptr);
+                    Digest(mptr);
                     mptr += BlockSize;
                 }
                 uint8_t block[BlockSize];
@@ -252,12 +252,12 @@ namespace sha2
                 struct stat64 st;
                 if (stat64(path.c_str(), &st) != 0) throw std::exception();   /// file not found
 
-                std::memcpy(num, init_vector, BitCount);
+                std::memcpy(state, init_vector, BitCount);
                 uint8_t block[BlockSize];
                 FILE* fi = std::fopen(path.c_str(), filetype);
                 while (std::fread(block, 1, BlockSize, fi) == BlockSize)
                 {
-                    Digest(num, block);
+                    Digest(block);
                 }
                 std::fclose(fi);
                 Finalize(block, st.st_size);
