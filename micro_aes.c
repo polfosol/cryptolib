@@ -10,29 +10,26 @@
 /*****************************************************************************/
  
 #if (AES___ == 256) || (AES___ == 192)
- #if(AES___ == 256)
- #define AES256
- #endif
-#define  KEYLEN (AES___/8)
+#define KEYLEN  (AES___/8)
 #else
-#define  AES128
-#define  KEYLEN       (16) // Key length in bytes
+#define KEYLEN        (16) /* Key length in bytes                            */
+#define AES128
 #endif
- 
-#define  BLOCKLEN (128 /8) // Block length in AES is always 128-bits.
-#define  Nb  (BLOCKLEN /4) // The number of columns comprising a state in AES
-#define  Nk    (KEYLEN /4) // The number of 32 bit words in a key.
-#define  ROUNDS    (Nk +6) // The number of rounds in AES Cipher.
- 
- 
- 
- 
+
+#define BLOCKLEN   (128/8) /* Block length in AES is always 128-bits.        */
+#define Nb    (BLOCKLEN/4) /* The number of columns comprising a AES state.  */
+#define Nk      (KEYLEN/4) /* The number of 32 bit words in a key.           */
+#define ROUNDS      (Nk+6) /* The number of rounds in AES Cipher.            */
+#define GCM_IV_SIZE   (12) /* The number of bytes in GCM's i.v.              */
+#define GCM_TAG_SIZE  (16) /* The number of bytes in GCM authentication tag  */
+
+
 /*****************************************************************************/
 /* Private variables:                                                        */
 /*****************************************************************************/
+
 // state - array holding the intermediate results during decryption.
 typedef uint8_t state_t[Nb][4];
-static state_t* state;
  
 // The array that stores the round keys.
 // AES-128 has 10 rounds, + one AddRoundKey before first round: 16x(10+1)=176.
@@ -95,15 +92,14 @@ static const uint8_t rsbox[256] =
 /* Auxiliary functions for AES-128 and AES-GCM algorithm:                    */
 /*****************************************************************************/
  
+// static uint8_t getSBoxValue (uint8_t num)  { return sbox[num];  }
+// static uint8_t getSBoxInvert (uint8_t num) { return rsbox[num]; }
+// static uint8_t xtime (uint8_t x) { return (x << 1) ^ (((x >> 7) & 1) * 0x1b); }
+
 #define getSBoxValue(num)  (sbox[(num)])
 #define getSBoxInvert(num) (rsbox[(num)])
+#define xtime(x)           ((x << 1) ^ ((x >> 7) & 1 ? 0x1b : 0))
  
- 
-// auxiliary function for Multiplication in GF(2^8)
-static uint8_t xtime (uint8_t x)
-{
-    return (x << 1) ^ (((x >> 7) & 1) * 0x1b);
-}
  
 // performs XOR operation on two 128-bit blocks
 static void xorBlock (uint8_t *dest, const uint8_t *src)
@@ -186,69 +182,71 @@ static uint8_t shiftBlockRight (uint8_t *block)
 }
  
 // Performs multiplications in 128 bit Galois bit field
-static void GF_Mul128 (const uint8_t *x, const uint8_t *y, uint8_t *result)
+static void GF_Mul128 (uint8_t *x, const uint8_t *y)
 {
     // working memory
+    uint8_t result[BLOCKLEN] = { 0 };
     uint8_t i, j, temp[BLOCKLEN];
- 
-    // init result to 0s and copy y to temp
+
+    // copy y to temp
     memcpy(temp, y, BLOCKLEN);
-    memset(result, 0, BLOCKLEN);
- 
+
     // multiplication algorithm
-    for (i = 0; i < BLOCKLEN; i++)
+    for (i = 0; i < BLOCKLEN; ++i)
     {
         for (j = 0x80; j != 0; j >>= 1)
         {
             if (x[i] & j)
             {
-                /* Z_(i + 1) = Z_i XOR V_i */
-                xorBlock(result, temp);
+                xorBlock(result, temp);         /*   Z_(i + 1) = Z_i XOR V_i */
             }
             /* V_(i + 1) = (V_i >> 1) XOR R */
-            if (shiftBlockRight (temp + BLOCKLEN - 1))
+            if (shiftBlockRight (temp + BLOCKLEN - 1))     /* if temp is odd */
             {
-                // if temp is odd, do something?
-                /* R = 11100001 || 0^120 */
-                temp[0] ^= 0xe1;
+                temp[0] ^= 0xe1;                /*     R = 11100001 || 0^120 */
             }
         }
     }
+
+    // result is saved into x
+    memcpy (x, result, BLOCKLEN);
 }
  
 /*****************************************************************************/
 /* Private functions for the AES algorithm:                                  */
 /*****************************************************************************/
  
-// This function produces Nb(Nr+1) round keys.
+// This function produces Nb(ROUNDS+1) round keys.
 // The round keys are used in each round to encrypt/decrypt the states.
 static void KeyExpansion (const uint8_t* key)
 {
-    uint8_t i, r, *n, *b, temp[4]; // Used for the column/row operations
-    r = 1;                         // RCON
-    b = RoundKey;                  // current block
-    n = RoundKey + KEYLEN;         // next block
- 
+    uint8_t i, j, r, temp[4];  // Used for the column/row operations
+    r = 1;                     // RCON
+    j = KEYLEN;
+
     // The first round key is the key itself.
     memcpy (RoundKey, key, KEYLEN);
- 
+
     // All other round keys are found from the previous round keys.
-    for (i = 0; i < Nb * ROUNDS; ++i)
+    for (i = 0; i < BLOCKLEN * ROUNDS; )
     {
-        if (i % Nk)
+        if (i % KEYLEN)
         {
-            memcpy (temp, n - 4, 4);
+            temp[0] = RoundKey[j - 4];
+            temp[1] = RoundKey[j - 3];
+            temp[2] = RoundKey[j - 2];
+            temp[3] = RoundKey[j - 1];
         }
         else
         {
-            temp[0] = getSBoxValue (*(n - 3)) ^ r;
-            temp[1] = getSBoxValue (*(n - 2)) ;
-            temp[2] = getSBoxValue (*(n - 1)) ;
-            temp[3] = getSBoxValue (*(n - 4)) ;
+            temp[3] = getSBoxValue (RoundKey[j - 4]) ;
+            temp[0] = getSBoxValue (RoundKey[j - 3]) ^ r;
+            temp[1] = getSBoxValue (RoundKey[j - 2]) ;
+            temp[2] = getSBoxValue (RoundKey[j - 1]) ;
             r = xtime (r);
         }
-#ifdef AES256
-        if (i % Nk == 4)
+#if Nk == 8 /* only AES256 */
+        if (i % KEYLEN == 16)
         {
             temp[0] = getSBoxValue (temp[0]);
             temp[1] = getSBoxValue (temp[1]);
@@ -256,55 +254,54 @@ static void KeyExpansion (const uint8_t* key)
             temp[3] = getSBoxValue (temp[3]);
         }
 #endif
-        *n++ = *b++ ^ temp[0];
-        *n++ = *b++ ^ temp[1];
-        *n++ = *b++ ^ temp[2];
-        *n++ = *b++ ^ temp[3];
+        RoundKey[j++] = RoundKey[i++] ^ temp[0];
+        RoundKey[j++] = RoundKey[i++] ^ temp[1];
+        RoundKey[j++] = RoundKey[i++] ^ temp[2];
+        RoundKey[j++] = RoundKey[i++] ^ temp[3];
     }
 }
  
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-static void AddRoundKey (uint8_t round)
+static void AddRoundKey (const uint8_t round, uint8_t* state)
 {
-    xorBlock ((*state)[0], RoundKey + BLOCKLEN * round);
+    xorBlock (state, RoundKey + BLOCKLEN * round);
 }
  
 // The SubBytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-static void SubBytes (uint8_t* s)
+static void SubBytes (uint8_t* state)
 {
     uint8_t i;
     for (i = 0; i < BLOCKLEN; ++i)
     {
-        *s = getSBoxValue (*s);
-        ++s;
+        state[i] = getSBoxValue (state[i]);
     }
 }
- 
+
 // The ShiftRows() function shifts the rows in the state to the left.
 // Each row is shifted with different offset.
 // Offset = Row number. So the first row is not shifted.
-static void ShiftRows (void)
+static void ShiftRows (state_t* state)
 {
     uint8_t temp;
- 
+
     // Rotate first row 1 columns to left
     temp           = (*state)[0][1];
     (*state)[0][1] = (*state)[1][1];
     (*state)[1][1] = (*state)[2][1];
     (*state)[2][1] = (*state)[3][1];
     (*state)[3][1] = temp;
- 
+
     // Rotate second row 2 columns to left
     temp           = (*state)[0][2];
     (*state)[0][2] = (*state)[2][2];
     (*state)[2][2] = temp;
- 
+
     temp           = (*state)[1][2];
     (*state)[1][2] = (*state)[3][2];
     (*state)[3][2] = temp;
- 
+
     // Rotate third row 3 columns to left
     temp           = (*state)[0][3];
     (*state)[0][3] = (*state)[3][3];
@@ -312,79 +309,78 @@ static void ShiftRows (void)
     (*state)[2][3] = (*state)[1][3];
     (*state)[1][3] = temp;
 }
- 
+
 // MixColumns function mixes the columns of the state matrix
-static void MixColumns (uint8_t* s)
+static void MixColumns (state_t* state)
 {
     uint8_t a, b, c, d, i;
     for (i = 0; i < Nb; ++i)
     {
-        a  = s[0] ^ s[1];
-        b  = s[1] ^ s[2];
-        c  = s[2] ^ s[3];
-        d     = a ^ c;
-        *s++ ^= d ^ xtime (a);
-        *s++ ^= d ^ xtime (b);
-        b    ^= d;
-        *s++ ^= d ^ xtime (c);
-        *s++ ^= d ^ xtime (b);
+        a  = (*state)[i][0] ^ (*state)[i][1];
+        b  = (*state)[i][1] ^ (*state)[i][2];
+        c  = (*state)[i][2] ^ (*state)[i][3];
+        d  = a ^ c;
+        (*state)[i][0] ^= d ^ xtime (a);
+        (*state)[i][1] ^= d ^ xtime (b);
+        b ^= d; /* results in (*state)[i][3] ^ (*state)[i][0] */
+        (*state)[i][2] ^= d ^ xtime (c);
+        (*state)[i][3] ^= d ^ xtime (b);
     }
 }
- 
+
 // MixColumns function mixes the columns of the state matrix.
 // The method used to multiply may be difficult to understand for the inexperienced.
 // Please use the references to gain more information.
-static void InvMixColumns (uint8_t* s)
+static void InvMixColumns (state_t* state)
 {
     uint8_t a, b, c, d, i;
- 
+
     for (i = 0; i < Nb; ++i)
     {
-        a = s[0];
-        b = s[1];
-        c = s[2];
-        d = s[3];
- 
-        *s++ = GF_Mul8 (a, 0x0e) ^ GF_Mul8 (b, 0x0b) ^ GF_Mul8 (c, 0x0d) ^ GF_Mul8 (d, 0x09);
-        *s++ = GF_Mul8 (a, 0x09) ^ GF_Mul8 (b, 0x0e) ^ GF_Mul8 (c, 0x0b) ^ GF_Mul8 (d, 0x0d);
-        *s++ = GF_Mul8 (a, 0x0d) ^ GF_Mul8 (b, 0x09) ^ GF_Mul8 (c, 0x0e) ^ GF_Mul8 (d, 0x0b);
-        *s++ = GF_Mul8 (a, 0x0b) ^ GF_Mul8 (b, 0x0d) ^ GF_Mul8 (c, 0x09) ^ GF_Mul8 (d, 0x0e);
+        a = (*state)[i][0];
+        b = (*state)[i][1];
+        c = (*state)[i][2];
+        d = (*state)[i][3];
+
+        (*state)[i][0] = GF_Mul8 (a, 0xe) ^ GF_Mul8 (b, 0xb) ^ GF_Mul8 (c, 0xd) ^ GF_Mul8 (d, 0x9);
+        (*state)[i][1] = GF_Mul8 (a, 0x9) ^ GF_Mul8 (b, 0xe) ^ GF_Mul8 (c, 0xb) ^ GF_Mul8 (d, 0xd);
+        (*state)[i][2] = GF_Mul8 (a, 0xd) ^ GF_Mul8 (b, 0x9) ^ GF_Mul8 (c, 0xe) ^ GF_Mul8 (d, 0xb);
+        (*state)[i][3] = GF_Mul8 (a, 0xb) ^ GF_Mul8 (b, 0xd) ^ GF_Mul8 (c, 0x9) ^ GF_Mul8 (d, 0xe);
     }
 }
- 
+
 // The SubBytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-static void InvSubBytes (uint8_t* s)
+static void InvSubBytes (uint8_t* state)
 {
     uint8_t i;
     for (i = 0; i < BLOCKLEN; ++i)
     {
-        *s = getSBoxInvert (*s);
-        ++s;
+        state[i] = getSBoxInvert (state[i]);
     }
 }
- 
+
 // The InvShiftRows function shifts the rows in the state to the right.
-static void InvShiftRows (void)
+static void InvShiftRows (state_t* state)
 {
     uint8_t temp;
- 
+
     // Rotate first row 1 columns to right
     temp           = (*state)[3][1];
     (*state)[3][1] = (*state)[2][1];
     (*state)[2][1] = (*state)[1][1];
     (*state)[1][1] = (*state)[0][1];
     (*state)[0][1] = temp;
- 
+
     // Rotate second row 2 columns to right
     temp           = (*state)[0][2];
     (*state)[0][2] = (*state)[2][2];
     (*state)[2][2] = temp;
- 
+
     temp           = (*state)[1][2];
     (*state)[1][2] = (*state)[3][2];
     (*state)[3][2] = temp;
- 
+
     // Rotate third row 3 columns to right
     temp           = (*state)[0][3];
     (*state)[0][3] = (*state)[1][3];
@@ -409,25 +405,24 @@ static void AES_EncryptBlock (const uint8_t* input, uint8_t* output)
 {
     // Copy input to output, and work in-memory on output
     memcpy (output, input, BLOCKLEN);
-    state = (state_t*) output;
- 
+
     uint8_t round;
- 
+
     // There will be #ROUNDS rounds.
     // The first #ROUNDS-1 rounds are identical.
     // The last one does not involve mixing columns
     round = 0;
     for (;;)
     {
-        AddRoundKey (round++);
+        AddRoundKey (round++, output);
         SubBytes (output);
-        ShiftRows();
-        if (round < ROUNDS) MixColumns (output);
+        ShiftRows ((state_t*) output);
+        if (round < ROUNDS) MixColumns ((state_t*) output);
         else break;
     }
- 
+
     // Add the last round key to the state after finishing the rounds.
-    AddRoundKey (ROUNDS);
+    AddRoundKey (ROUNDS, output);
 }
  
 // Decrypt input (128-bit cipher-text) into a 128-bit plain text as output
@@ -435,23 +430,22 @@ static void AES_DecryptBlock (const uint8_t* input, uint8_t* output)
 {
     // Copy input to output, and work in-memory on output
     memcpy (output, input, BLOCKLEN);
-    state = (state_t*) output;
- 
+
     // Add the last round key to the state before starting the rounds.
-    AddRoundKey (ROUNDS);
- 
+    AddRoundKey (ROUNDS, output);
+
     uint8_t round;
- 
+
     // There will be #ROUNDS rounds.
     // The first #ROUNDS-1 rounds are identical.
     // The last one does not involve mixing columns
     round = ROUNDS;
     for (;;)
     {
-        InvShiftRows();
+        InvShiftRows ((state_t*) output);
         InvSubBytes (output);
-        AddRoundKey (--round);
-        if (round) InvMixColumns (output);
+        AddRoundKey (--round, output);
+        if (round) InvMixColumns ((state_t*) output);
         else break;
     }
 }
@@ -466,12 +460,11 @@ static void AES_DecryptBlock (const uint8_t* input, uint8_t* output)
  * @param   pKey            pointer to the provided 128 bit AES key
  * @param   pAuthKey        pointer to 16 byte array put to subkey H in
  */
-static void generateKeys( const uint8_t *pKey, uint8_t *pAuthKey )
+static void generateGCMKey (const uint8_t *pKey, uint8_t *pAuthKey)
 {
-    AES128_setkey( pKey );
+    AES128_setkey (pKey);
     // encrypt 128 bit block of 0s to generate authentication sub key
-    memset(pAuthKey, 0, BLOCKLEN);
-    AES_EncryptBlock(pAuthKey, pAuthKey);
+    AES_EncryptBlock (pAuthKey, pAuthKey);
 }
  
 /**
@@ -488,19 +481,18 @@ static void GCTR( const uint8_t *pInput,
                   uint8_t *pOutput )
 {
     if (inputLength == 0) return;
- 
-    uint8_t n, *p, *xpos, *ypos, ctrBlock[BLOCKLEN];
- 
+
+    uint8_t n, *xpos, *ypos, ctrBlock[BLOCKLEN];
+
     xpos = (uint8_t*) pInput;
     ypos = pOutput;
-    p = ctrBlock;
- 
+
     // calculate number of full blocks to cipher
     n = (uint8_t) (inputLength / BLOCKLEN);
- 
+
     // copy ICB to ctrBlock
-    memcpy(ctrBlock, pCtrBlock, BLOCKLEN);
- 
+    memcpy (ctrBlock, pCtrBlock, BLOCKLEN);
+
     // for full blocks
     while (n--)
     {
@@ -520,9 +512,9 @@ static void GCTR( const uint8_t *pInput,
     n = (uint8_t) (inputLength % BLOCKLEN);
     if( n )
     {
-        // encrypt into tmp and combine with last block of input
-        AES_EncryptBlock(ctrBlock, ctrBlock);
-        while (n--)  *ypos++ = *xpos++ ^ *p++;
+        // cipher counterblock and combine with last block of input
+        AES_EncryptBlock (ctrBlock, ctrBlock);
+        while (n--)  ypos[n] = xpos[n] ^ ctrBlock[n];
     }
 }
 
@@ -542,52 +534,29 @@ static void GHASH( const uint8_t *pInput,
 {
     if (inputLength == 0) return;
  
-    uint8_t m, tmp[BLOCKLEN]; // if we use full blocks, no need for tmp
-    const uint8_t *xpos = pInput;
- 
+    uint8_t m, *xpos;
+
     // calculate number of full blocks to hash
     m = (uint8_t) (inputLength / BLOCKLEN);
- 
+    xpos = (uint8_t*) pInput;
+
     // hash full blocks
     while (m--)
     {
         // Y_i = (Y^(i-1) XOR X_i) dot H
-        xorBlock(pOutput, xpos);
+        xorBlock (pOutput, xpos);
+        GF_Mul128 (pOutput, pAuthKey);
+
         xpos += BLOCKLEN; // move to next block
- 
-        GF_Mul128(pOutput, pAuthKey, tmp);
- 
-        // copy tmp to output
-        memcpy(pOutput, tmp, BLOCKLEN);
     }
- 
+
     m = (uint8_t) (inputLength % BLOCKLEN);  // last block
     // check if final partial block. Can be omitted if we use full blocks.
-    if( m )
+    if (m)
     {
-        // zero pad
-        memcpy(tmp, xpos, m);
-        memset(tmp + m, 0, BLOCKLEN - m);
- 
-        // Y_i = (Y^(i-1) XOR X_i) dot H
-        xorBlock(pOutput, tmp);
-        GF_Mul128(pOutput, pAuthKey, tmp);
-        memcpy(pOutput, tmp, BLOCKLEN);
+        while (m--)  pOutput[m] ^= xpos[m];
+        GF_Mul128 (pOutput, pAuthKey);
     }
-}
- 
-/**
- * @note    aes_gcm_prepare_j0
- * @brief   generates initial counter block from IV
- * @param   pIV             pointer to 12 byte initial vector nonce
- * @param   pOutput         pointer to 16 byte output array
- */
-static void generateICB(const uint8_t *pIV, uint8_t *pOutput)
-{
-    // Prepare block J0 = IV || 0^31 || 1 [len(IV) = 96]
-    memcpy(pOutput, pIV, GCM_IV_SIZE);
-    memset(pOutput + GCM_IV_SIZE, 0, BLOCKLEN - GCM_IV_SIZE);
-    pOutput[BLOCKLEN - 1] = 0x01;
 }
  
 /**
@@ -598,18 +567,16 @@ static void generateICB(const uint8_t *pIV, uint8_t *pOutput)
  * @param   PDATALength length of plain text
  * @param   pCDATA      pointer to array for cipher text
  */
-static void generateCDATA( const uint8_t *pICB,
-                           const uint8_t *pPDATA,
-                           uint16_t PDATALength,
-                           uint8_t *pCDATA )
+static void generateCDATA( const uint8_t *pPDATA,
+                           const uint16_t PDATALength,
+                           uint8_t *pCDATA,
+                           uint8_t *pICB )
 {
-    // generate counterblock J
-    uint8_t ctrBlock[BLOCKLEN];
-    memcpy(ctrBlock, pICB, BLOCKLEN);
-    incr32(ctrBlock);
- 
+    // initiate counterblock J
+    pICB[BLOCKLEN - 1] = 2;
+
     // encrypt
-    GCTR(pPDATA, PDATALength, ctrBlock, pCDATA);
+    GCTR (pPDATA, PDATALength, pICB, pCDATA);
 }
  
 /**
@@ -630,10 +597,8 @@ static void generateTag( const uint8_t *pAuthKey,
                          uint8_t * pTag,
                          const uint8_t *pICB)
 {
-    uint8_t lengthBuffer[BLOCKLEN];
-    uint8_t S[BLOCKLEN];
-    memset(lengthBuffer, 0, BLOCKLEN);
-    memset(S, 0, BLOCKLEN);
+    uint8_t lengthBuffer[BLOCKLEN] = { 0 };
+    uint8_t S[BLOCKLEN] = { 0 };
     /*
      * u = 128 * ceil[len(C)/128] - len(C)
      * v = 128 * ceil[len(A)/128] - len(A)
@@ -648,11 +613,15 @@ static void generateTag( const uint8_t *pAuthKey,
     lengthBuffer[14] = (CDATALength >> 5) & 0xff;
     lengthBuffer[15] = (CDATALength << 3) & 0xff;
  
-    GHASH(pADATA, ADATALength, pAuthKey, S);
-    GHASH(pCDATA, CDATALength, pAuthKey, S);
-    GHASH(lengthBuffer, BLOCKLEN, pAuthKey, S);
- 
-    GCTR(S, BLOCKLEN, pICB, pTag);
+    GHASH (pADATA, ADATALength, pAuthKey, S);
+    GHASH (pCDATA, CDATALength, pAuthKey, S);
+    GHASH (lengthBuffer, BLOCKLEN, pAuthKey, S);
+
+    // initiate counterblock J
+    pICB[BLOCKLEN - 1] = 1;
+
+    // encrypt
+    GCTR (S, BLOCKLEN, pICB, pTag);
 }
 
 /**
@@ -677,16 +646,16 @@ static uint8_t aes128_gcm_encrypt( const uint8_t* key,
                                    uint8_t* messageTag,
                                    uint8_t* CDATA )
 {
-    uint8_t authKey[BLOCKLEN];
-    uint8_t ICB[BLOCKLEN];
- 
-    generateKeys(key, authKey);     // aes_key_expand & aes_gcm_init_hash_subkey
-    generateICB(IV, ICB);           // aes_gcm_prepare_j0
- 
-    generateCDATA(ICB, PDATA, PDATALength, CDATA);
- 
-    generateTag(authKey, ADATA, ADATALength, CDATA, PDATALength, messageTag, ICB);
- 
+    uint8_t authKey[BLOCKLEN] = { 0 };
+    uint8_t ICB[BLOCKLEN] = { 0 };
+
+    generateGCMKey (key, authKey);  // aes_key_expand & aes_gcm_init_hash_subkey
+    memcpy (ICB, IV, GCM_IV_SIZE);  // aes_gcm_prepare_j0
+
+    generateCDATA (PDATA, PDATALength, CDATA, ICB);
+
+    generateTag (authKey, ADATA, ADATALength, CDATA, PDATALength, messageTag, ICB);
+
     return 0;
 }
  
@@ -719,22 +688,22 @@ static uint8_t aes128_gcm_decrypt( const uint8_t* key,
                                    const uint8_t  tagLength,
                                    uint8_t* PDATA )
 {
-    uint8_t authKey[BLOCKLEN];
-    uint8_t ICB[BLOCKLEN];
+    uint8_t authKey[BLOCKLEN] = { 0 };
+    uint8_t ICB[BLOCKLEN] = { 0 };
     uint8_t calculatedTag[GCM_TAG_SIZE];
- 
-    generateKeys(key, authKey);     // aes_key_expand & aes_gcm_init_hash_subkey
-    generateICB(IV, ICB);           // aes_gcm_prepare_j0
- 
-    generateTag(authKey, ADATA, ADATALength, CDATA, CDATALength, calculatedTag, ICB);
- 
+
+    generateGCMKey (key, authKey);  // aes_key_expand & aes_gcm_init_hash_subkey
+    memcpy (ICB, IV, GCM_IV_SIZE);  // aes_gcm_prepare_j0
+
+    generateTag (authKey, ADATA, ADATALength, CDATA, CDATALength, calculatedTag, ICB);
+
     // function to compare tags and return 0 if they match
-    if (memcmp( calculatedTag, messageTag, tagLength ) != 0)
+    if (memcmp (calculatedTag, messageTag, tagLength) != 0)
     {
         return AUTHENTICATION_FAILURE;
     }
- 
-    generateCDATA(ICB, CDATA, CDATALength, PDATA);
- 
+
+    generateCDATA (CDATA, CDATALength, PDATA, ICB);
+
     return 0;
 }
