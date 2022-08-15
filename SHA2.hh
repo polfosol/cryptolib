@@ -194,23 +194,23 @@ namespace sha2
                 {
                     (schedule[i / sizeof(T)] <<= 8) |= T(chunk[i]);
                 }
-                for (size_t i = 16; i < Rounds; i++)    /// extend
+                for (size_t i = 0; i < Rounds-16; i++)  /// extend
                 {
-                    schedule[i] = schedule[i - 16] + schedule[i - 7]
-                        + Roll(schedule[i - 15], sr + 6) + Roll(schedule[i - 2], sr + 9);
+                    schedule[i + 16] = schedule[i] + schedule[i + 9]
+                        + Roll(schedule[i + 1], sr + 6) + Roll(schedule[i + 14], sr + 9);
                 }
                 for (size_t i = 0; i < Rounds; i++)
                 {
                     Compress(t[-i & 7], t[(1 - i) & 7], t[(2 - i) & 7], t[(3 - i) & 7], t[(4 - i) & 7],
                         t[(5 - i) & 7], t[(6 - i) & 7], t[(7 - i) & 7], schedule[i], round_table[i]);
                 }
-                for (size_t i = 0; i < 8; i++) state[i] += t[i];
+                for (size_t i = 0; i < 8; i++)   state[i] += t[i];
             }
 
             ///------ padding the last block and finalizing the hash
             inline void Finalize(uint8_t* block, uint64_t size)
             {
-                size_t rem = size & (BlockSize - 1);
+                size_t rem = size % BlockSize;
                 block[rem++] = 0x80;
                 std::memset(block + rem, 0, BlockSize - rem);
                 if (rem > BlockSize - 2 * sizeof(T))
