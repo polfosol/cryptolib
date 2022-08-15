@@ -143,20 +143,19 @@ namespace sha2
                 {
                     round_table = (T const*)(void*)& sha512_round_table[0];
                     init_vector = (T const*)(void*)& sha512_init_vectors[H - SHA_512][0];
-                    return;
+                    return;          /// the rest is for 32-bit based hashes
                 }
-                static uint32_t table_iv_32[80], i = 0;  /// 32-bit based hashes
-                if (table_iv_32[0] == 0)  /// loops are skipped if static array is already filled.
+                static uint32_t table_iv_32[80];
+                for (size_t i = 0; i < 80 && !table_iv_32[i]; ++i)   /// skip if array is already set
                 {
-                    for (; i < 64; ++i) table_iv_32[i] = sha512_round_table[i] >> 32;   // MSBs
-                    for (; i < 72; ++i) table_iv_32[i] = sha512_init_vectors[0][i & 7] >> 32;
-                    for (; i < 80; ++i) table_iv_32[i] = sha512_init_vectors[1][i & 7]; // for SHA224
+                    uint64_t j = i < 64 ? sha512_round_table[i] : sha512_init_vectors[i / 72][i & 7];
+                    table_iv_32[i] = uint32_t(i < 72 ? j >> 32 : j); /// MSBs for i < 72, else LSB
                 }
                 round_table = (T const*)(void*)& table_iv_32[0];
                 init_vector = (T const*)(void*)& table_iv_32[64 + 8 * (H - SHA_256)];
             }
 
-            /// the default destructor should take care of num and bytes. others won't need deletion(?)
+            /// the default destructor should take care of garbage. won't need an explicit one
 
         private:
             enum
